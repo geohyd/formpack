@@ -29,7 +29,7 @@ class Export(object):
                  group_sep="/", hierarchy_in_labels=False,
                  version_id_keys=[],
                  multiple_select="both", copy_fields=(), force_index=False,
-                 title="submissions", tag_cols_for_header=None):
+                 title="submissions", tag_cols_for_header=None, header_lang=-1):
         """
 
         :param formpack: FormPack
@@ -46,10 +46,13 @@ class Export(object):
         :param force_index: bool.
         :param title: string
         :param tag_cols_for_header: list
+        :param header_lang: string, False (`constants.UNSPECIFIED_TRANSLATION`), or
+            None (`constants.UNTRANSLATED`), if not set, default value equal lang arg.
         """
 
         self.formpack = formpack
         self.lang = lang
+        self.header_lang = self.lang if header_lang == -1 else header_lang
         self.group_sep = group_sep
         self.title = title
         self.versions = form_versions
@@ -78,7 +81,7 @@ class Export(object):
         # this deals with merging all form versions headers and labels
         params = (
             lang, group_sep, hierarchy_in_labels, multiple_select,
-            tag_cols_for_header,
+            tag_cols_for_header, self.header_lang,
         )
         res = self.get_fields_labels_tags_for_all_versions(*params)
         self.sections, self.labels, self.tags = res
@@ -129,7 +132,8 @@ class Export(object):
                                                 group_sep="/",
                                                 hierarchy_in_labels=False,
                                                 multiple_select="both",
-                                                tag_cols_for_header=None):
+                                                tag_cols_for_header=None,
+                                                header_lang=UNSPECIFIED_TRANSLATION):
         """ Return 3 mappings containing field, labels, and tags by section
 
             This is needed because when making an export for several
@@ -173,7 +177,7 @@ class Export(object):
                 (field.name, field)
             )
             section_labels.setdefault(field.section.name, []).append(
-                field.get_labels(lang, group_sep,
+                field.get_labels(header_lang, group_sep,
                                  hierarchy_in_labels,
                                  multiple_select)
             )
