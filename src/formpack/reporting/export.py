@@ -402,6 +402,30 @@ class Export(object):
 
         return rows
 
+    def to_antea(self, settings, output_file, submissions, xform_id, token, user, export_type):
+        module = __import__('formpack.antea_export.' + export_type, fromlist=['AnteaExport'])
+        AnteaExport = getattr(module, 'AnteaExport')
+        # I pass self (this formpack) to my new object
+        args = {
+            'formPack' : self,
+            'settings' : settings,
+            'submissions' : submissions,
+            'xform_id' : xform_id,
+            'token' : token,
+            'user' : user,
+            'export_type' : export_type
+        }
+        anteaExport = AnteaExport(**args)
+        #Call compute method
+        anteaExport.compute()
+        #Get the path of result file
+        finalPath = anteaExport.get_final_file_path()
+        #Write result in the final Django xlsx file
+        with open(finalPath, "rb") as template_final_xlsx:
+            output_file.write(template_final_xlsx.read())
+        #Call finish method
+        anteaExport.finish()
+
     def to_dict(self, submissions):
         '''
             This defeats the purpose of using generators, but it's useful for tests
