@@ -434,12 +434,12 @@ class Export(object):
         for chunk in self.parse_submissions(submissions):
             for section_name, rows in chunk.items():
                 if section_name not in finalJson:
-                    finalJson[str(section_name)] = []
+                    finalJson[section_name] = []
                 for row in rows:
                     obj = {}
                     for key, data in zip(self.labels[section_name], row):
-                        obj[str(key)] = data
-                    finalJson[str(section_name)].append(obj)
+                        obj[key] = data
+                    finalJson[section_name].append(obj)
                     if u"_parent_table_name" not in obj:
                         finalJson['-'].append(obj)
         #Append repeatGroup in _parent_table_name
