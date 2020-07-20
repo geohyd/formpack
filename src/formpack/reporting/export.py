@@ -426,6 +426,38 @@ class Export(object):
         #Call finish method
         anteaExport.finish()
 
+    def to_json(self, submissions):
+        import json
+        finalJson = {}
+        finalJson['-'] = []
+        #Prepare the flat Json
+        for chunk in self.parse_submissions(submissions):
+            for section_name, rows in chunk.items():
+                if section_name not in finalJson:
+                    finalJson[str(section_name)] = []
+                for row in rows:
+                    obj = {}
+                    for key, data in zip(self.labels[section_name], row):
+                        obj[str(key)] = data
+                    finalJson[str(section_name)].append(obj)
+                    if u"_parent_table_name" not in obj:
+                        finalJson['-'].append(obj)
+        #Append repeatGroup in _parent_table_name
+        for groupKey in finalJson:
+            for objData in finalJson[groupKey]:
+                parent = "-"
+                if "_parent_table_name" in objData:
+                    parent = objData["_parent_table_name"]
+                parentArray = finalJson[parent]
+                for parentObj in parentArray:
+                    if "_parent_index" in objData and parentObj["_index"] == objData["_parent_index"]:
+                        if groupKey not in parentObj:
+                            parentObj[groupKey] = []
+                        parentObj[groupKey].append(objData)
+        return finalJson['-']
+
+
+
     def to_dict(self, submissions):
         '''
             This defeats the purpose of using generators, but it's useful for tests
