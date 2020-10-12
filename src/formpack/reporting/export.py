@@ -447,8 +447,16 @@ class Export(object):
         #Call finish method
         anteaExport.finish()
 
+    def get_type(self, key):
+        """Return the type of the key"""
+        all_fields = self.formpack.get_fields_for_versions(self.versions)
+        for field in all_fields:
+            if field.name == key:
+                return field.data_type
+
     def to_json(self, submissions):
         import json
+        import ast
         finalJson = {}
         finalJson['-'] = []
         #Prepare the flat Json
@@ -459,7 +467,16 @@ class Export(object):
                 for row in rows:
                     obj = {}
                     for key, data in zip(self.labels[section_name], row):
-                        obj[key] = data
+                        try:
+                            key_type = self.get_type(key)
+                            if key_type is None:
+                                obj[key] = data
+                            elif key_type == "decimal" or key_type == "integer":
+                                obj[key] = ast.literal_eval(data)
+                            else:
+                                obj[key] = data
+                        except Exception as e:
+                            obj[key] = data
                     finalJson[section_name].append(obj)
                     if u"_parent_table_name" not in obj:
                         finalJson['-'].append(obj)
