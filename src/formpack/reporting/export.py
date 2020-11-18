@@ -447,36 +447,56 @@ class Export(object):
         #Call finish method
         anteaExport.finish()
 
-    def get_type(self, key):
+    def get_field(self, key):
         """Return the type of the key"""
         all_fields = self.formpack.get_fields_for_versions(self.versions)
         for field in all_fields:
             if field.name == key:
-                return field.data_type
+                return field
 
     def to_json(self, submissions):
         import json
         import ast
+        all_fields = self.formpack.get_fields_for_versions(self.versions)
         finalJson = {}
         finalJson['-'] = []
+
         #Prepare the flat Json
         for chunk in self.parse_submissions(submissions):
+            multipleSelectsChoices = []
             for section_name, rows in chunk.items():
                 if section_name not in finalJson:
                     finalJson[section_name] = []
                 for row in rows:
                     obj = {}
+                    previous_select_multiple = None
                     for key, data in zip(self.labels[section_name], row):
                         try:
-                            key_type = self.get_type(key)
+                            current_field = self.get_field(key)
+                            if current_field:
+                                key_type = current_field.data_type
+                            else:
+                                key_type = None
                             if key_type is None:
-                                obj[key] = data
+                                is_multiple_choice = previous_select_multiple and previous_select_multiple["type"] == "select_multiple" and key in multipleSelectsChoices
+                                if is_multiple_choice:
+                                    obj[key] = ast.literal_eval(data)
+                                else:
+                                    obj[key] = data
                             elif key_type == "decimal" or key_type == "integer":
                                 obj[key] = ast.literal_eval(data)
+                            elif key_type == "select_multiple":
+                                multipleSelectsChoices.extend(current_field.get_labels())
+                                obj[key] = data
+                                previous_select_multiple = {
+                                    "key": key,
+                                    "type": key_type
+                                }
                             else:
                                 obj[key] = data
                         except Exception as e:
                             obj[key] = data
+
                     finalJson[section_name].append(obj)
                     if u"_parent_table_name" not in obj:
                         finalJson['-'].append(obj)
