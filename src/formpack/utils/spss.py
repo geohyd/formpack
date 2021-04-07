@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # 😬
-from __future__ import unicode_literals
 
-import logging
+from __future__ import unicode_literals
+from collections import OrderedDict
 
 # Constants
 LINE_LIMIT_BYTES = 251
@@ -23,10 +23,8 @@ VARIABLE_NAME_LIMIT_BYTES = 64
 def utf8_len(s):
     return len(s.encode('utf-8'))
 
-
 def spss_escape(s):
     return s.replace("'", "''").replace("\n", "\\n")
-
 
 def utf8_ellipsize(s, max_bytes, ellipsis='…'):
     r"""
@@ -68,8 +66,7 @@ def spss_labels_from_variables_dict(variables):
                 'SPSS variable name exceeds {} bytes: {}'.format(
                     VARIABLE_NAME_LIMIT_BYTES,
                     variable_name
-                )
-            )
+            ))
 
         variable_section_lines.append(
             "{line_leader}{variable_name} '{variable_label}'".format(
@@ -79,9 +76,7 @@ def spss_labels_from_variables_dict(variables):
                     utf8_ellipsize(
                         variable['label'],
                         VARIABLE_LABEL_LIMIT_BYTES,
-                    )
-                )
-            )
+                )))
         )
         variable_count += 1
 
@@ -170,7 +165,7 @@ def spss_labels_from_variables_dict(variables):
             last_split_in_string = False
             line_limit = LINE_LIMIT_BYTES # this will change if in a string
             byte_count = 0
-            while byte_count < line_limit:
+            while (byte_count < line_limit):
                 # good split points: whitespace, or good insides of strings
                 char = chars[char_i]
                 if in_string:

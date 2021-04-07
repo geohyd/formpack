@@ -16,9 +16,9 @@ restaurant_profile:
 from ..load_fixture_json import load_fixture_json
 
 DATA = {
-    'title': 'Restaurant profile',
-    'id_string': 'restaurant_profile',
-    'versions': [
+    u'title': 'Restaurant profile',
+    u'id_string': 'restaurant_profile',
+    u'versions': [
         load_fixture_json('restaurant_profile/v1'),
         load_fixture_json('restaurant_profile/v2'),
         load_fixture_json('restaurant_profile/v3'),

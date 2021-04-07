@@ -1,19 +1,20 @@
 # coding: utf-8
+
 from __future__ import (unicode_literals, print_function,
                         absolute_import, division)
 
 import copy
+from collections import OrderedDict
 
-from formpack import FormPack
-from formpack.constants import OR_OTHER_COLUMN as _OR_OTHER
-from formpack.constants import UNTRANSLATED
-from formpack.utils.expand_content import SCHEMA_VERSION
+from formpack.utils.expand_content import expand_content, _expand_type_to_dict
 from formpack.utils.expand_content import _expand_tags
 from formpack.utils.expand_content import _get_special_survey_cols
-from formpack.utils.expand_content import expand_content, _expand_type_to_dict
+from formpack.utils.expand_content import SCHEMA_VERSION
 from formpack.utils.flatten_content import flatten_content
-from formpack.utils.future import OrderedDict
-from formpack.utils.string import orderable_with_none
+from formpack.constants import UNTRANSLATED
+from formpack.constants import OR_OTHER_COLUMN as _OR_OTHER
+from formpack import FormPack
+
 
 
 def test_expand_selects_with_or_other():
@@ -265,9 +266,9 @@ def test_expand_translated_choice_sheets():
 
 
 def test_expand_hints_and_labels():
-    """
+    '''
     this was an edge case that triggered some weird behavior
-    """
+    '''
     s1 = {'survey': [{'type': 'select_one yn',
                       'label': 'null lang select1',
                       }],
@@ -284,11 +285,11 @@ def test_expand_hints_and_labels():
                       }],
           }
     expand_content(s1, in_place=True)
-    # Python3 raises a TypeError:
-    # `'<' not supported between instances of 'NoneType' and 'str'`
-    # when sorting a list with `None` values.
-    # We need
-    assert sorted(s1['translations'], key=orderable_with_none) == [None, 'En']
+    assert sorted(s1['translations']) == [None, 'En']
+
+
+def _s(rows):
+    return {'survey': [dict([[key, 'x']]) for key in rows]}
 
 
 def test_ordered_dict_preserves_order():
@@ -341,13 +342,10 @@ def test_get_special_survey_cols():
             'hint:English',
         ])
     values = [special[key] for key in sorted(special.keys())]
-    translations = sorted([x.get('translation') for x in values],
-                          key=orderable_with_none)
-    expected = sorted(['English', 'English', 'English', 'English',
-                       'chinese', 'Arabic', 'German', 'Français',
-                       UNTRANSLATED, UNTRANSLATED],
-                      key=orderable_with_none)
-    assert translations == expected
+    assert sorted(map(lambda x: x.get('translation'), values)
+                  ) == sorted(['English', 'English', 'English', 'English',
+                               'chinese', 'Arabic', 'German', 'Français',
+                               UNTRANSLATED, UNTRANSLATED])
 
 
 def test_not_special_cols():
@@ -361,7 +359,7 @@ def test_not_special_cols():
         'body:accuracyThreshold',
     ]
     (not_special, _t, tc) = _get_special_survey_cols(_s(not_special))
-    assert list(not_special) == []
+    assert not_special.keys() == []
 
 
 def test_expand_constraint_message():
@@ -454,6 +452,3 @@ def test_expand_translations_null_lang():
     s1_copy.pop('translated')
     s1_copy.pop('translations')
     assert s1 == s1_copy
-
-def _s(rows):
-    return {'survey': [dict([[key, 'x']]) for key in rows]}

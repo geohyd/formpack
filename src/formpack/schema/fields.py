@@ -1,17 +1,29 @@
 # coding: utf-8
+
 from __future__ import (unicode_literals, print_function, absolute_import,
                         division)
+import re
 
-from collections import defaultdict
-from functools import partial
 from operator import itemgetter
+from functools import partial
+
+try:
+    xrange = xrange
+except NameError:  # python 3
+    xrange = range
+
+from collections import defaultdict, OrderedDict
+
+try:
+    from cyordereddict import OrderedDict
+except ImportError:
+    pass
 
 import statistics
 
-from .datadef import FormDataDef, FormChoice
+from ..utils.xform_tools import normalize_data_type
 from ..constants import UNSPECIFIED_TRANSLATION
-from ..utils.future import range, OrderedDict
-from ..utils.ordered_collection import OrderedDefaultdict
+from .datadef import FormDataDef, FormChoice
 
 
 class FormField(FormDataDef):
@@ -78,8 +90,7 @@ class FormField(FormDataDef):
     def _get_label(self, lang=UNSPECIFIED_TRANSLATION, group_sep='/',
                    hierarchy_in_labels=False, multiple_select="both",
                    _hierarchy_end=None):
-        """
-        Return the label for this field
+        """Return the label for this field
 
         Args:
             lang (str, optional): Lang to translate the label to if possible.
@@ -101,7 +112,7 @@ class FormField(FormDataDef):
             path = []
             for level in self.hierarchy[1:_hierarchy_end]:
                 _t = level.labels.get(lang)
-                if isinstance(_t, list) and len(_t) == 1:
+                if isinstance(_t, list) and len(_t) is 1:
                     _t = _t[0]
                 # sometimes, level.labels returns a list
                 if _t:
@@ -280,8 +291,8 @@ class ExtendedFormField(FormField):
 
 
         :param stats: dict {'total_count': <int>, 'provided': <int>, 'show_graph': <bool>, 'not_provided': <int>}
-        :param metrics: defaultdict {'field value': OrderedCounter('value1', 'value2', ..., 'value3')}
-        :param top_splitters: list 5 most commons values among OrderedCounter collections
+        :param metrics: defaultdict {'field value': Counter('value1', 'value2', ..., 'value3')}
+        :param top_splitters: list 5 most commons values among Counter collections
         :param lang: string
         :return: defaultdict
 
@@ -357,7 +368,9 @@ class TextField(ExtendedFormField):
 
         values = sorted(substats.items(), key=sum_frequencies, reverse=True)
 
-        stats.update({'values': values[:limit]})
+        stats.update({
+            'values': values[:limit]
+        })
 
         return stats
 
@@ -365,10 +378,9 @@ class TextField(ExtendedFormField):
 class DateField(ExtendedFormField):
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
-        """
-        Return total count for all, and freq and % for 'date' date types
+        """ Return total count for all, and freq and % for 'date' date types
 
-        Dates are sorted from old to new.
+            Dates are sorted from old to new.
         """
 
         stats = super(DateField, self).get_stats(metrics, lang, limit)
@@ -425,7 +437,7 @@ class NumField(FormField):
 
         """
         for value, freq in sorted(dataset.items()):
-            for x in range(freq):
+            for x in xrange(freq):
                 yield value
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
@@ -460,12 +472,11 @@ class NumField(FormField):
         stats = parent.get_disaggregated_stats(metrics, top_splitters, lang,
                                                limit)
 
-        substats = OrderedDict()
+        substats = {}
 
         # transpose the metrics data structure to look like
         # {splitter1: [x, y, z], splitter2...}}
-        inversed_metrics = OrderedDefaultdict(list)
-
+        inversed_metrics = defaultdict(list)
         for val, counter in metrics.items():
             if val is None:
                 continue
@@ -839,7 +850,8 @@ class FormLiteracyTestField(FormChoiceFieldWithMultipleSelect):
     def __init__(self, *args, **kwargs):
         self.parameters_in_use = [
             param for param in self.PREPENDED_PARAMETERS if param is not None]
-        super(FormChoiceFieldWithMultipleSelect, self).__init__(*args, **kwargs)
+        return super(FormChoiceFieldWithMultipleSelect, self).__init__(
+            *args, **kwargs)
 
     @property
     def parameter_value_names(self):

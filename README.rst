@@ -12,16 +12,11 @@ Setup
 Install::
 
     python setup.py install
-
-Develop::
-
-    # Create and activate a new virtualenv, then:
-    pip install -r dev-requirements.txt
+    # or develop the code: python setup.py develop
 
 Test::
 
-    # Within a development environment, as described above:
-    pytest
+    tox
 
 Command line methods::
 

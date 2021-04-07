@@ -12,9 +12,9 @@ simplest:
 from ..load_fixture_json import load_fixture_json
 
 DATA = {
-    'title': 'The simplest possible survey',
-    'id_string': 'simplest',
-    'versions': [
+    u'title': 'The simplest possible survey',
+    u'id_string': 'simplest',
+    u'versions': [
         load_fixture_json('simplest/v1'),
     ],
 }

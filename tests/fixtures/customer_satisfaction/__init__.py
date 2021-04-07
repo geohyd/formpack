@@ -13,9 +13,9 @@ customer_satisfaction survey
 from ..load_fixture_json import load_fixture_json
 
 DATA = {
-    'title': 'Customer Satisfaction',
-    'id_string': 'customer_satisfaction',
-    'versions': [
+    u'title': 'Customer Satisfaction',
+    u'id_string': 'customer_satisfaction',
+    u'versions': [
         load_fixture_json('customer_satisfaction/v1'),
     ],
 }

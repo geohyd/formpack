@@ -13,9 +13,9 @@ dietary_needs:
 from ..load_fixture_json import load_fixture_json
 
 DATA = {
-    'title': 'Dietary needs',
-    'id_string': 'dietary_needs',
-    'versions': [
+    u'title': u'Dietary needs',
+    u'id_string': 'dietary_needs',
+    u'versions': [
         load_fixture_json('dietary_needs/v1'),
     ],
 }

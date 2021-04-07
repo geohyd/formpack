@@ -1,13 +1,12 @@
 # coding: utf-8
+
 from __future__ import (unicode_literals, print_function,
                         absolute_import, division)
 
 import unittest
-from copy import copy
-
-from nose.tools import raises
-
 from formpack import FormPack
+from copy import copy
+from nose.tools import raises
 
 SINGLE_NOTE_SURVEY = {'content': {
         'survey': [

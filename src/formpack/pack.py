@@ -1,16 +1,21 @@
 # coding: utf-8
+
 from __future__ import (unicode_literals, print_function,
                         absolute_import, division)
 
-import difflib
 import json
+import difflib
 from copy import deepcopy
 
+try:
+    from cyordereddict import OrderedDict
+except ImportError:
+    from collections import OrderedDict
+
 from .version import FormVersion
-from .utils import str_types
+from .utils import get_version_identifiers, str_types
 from .reporting import Export, AutoReport
 from .utils.expand_content import expand_content
-from .utils.future import OrderedDict
 from .utils.replace_aliases import replace_aliases
 from .constants import UNSPECIFIED_TRANSLATION
 from formpack.schema.fields import CopyField
@@ -72,13 +77,12 @@ class FormPack(object):
                 _id_keys.append(_id_key)
         return _id_keys
 
+
     @property
     def available_translations(self):
-        translations = []
+        translations = set()
         for version in self.versions.values():
-            for translation in version.translations:
-                if translation not in translations:
-                    translations.append(translation)
+            translations.update(version.translations)
         return translations
 
     def lookup(self, prop, default=None):
@@ -321,14 +325,14 @@ class FormPack(object):
 
     def to_dict(self, **kwargs):
         out = {
-            'versions': [v.to_dict() for v in self.versions.values()],
+            u'versions': [v.to_dict() for v in self.versions.values()],
         }
         if self.title is not None:
-            out['title'] = self.title
+            out[u'title'] = self.title
         if self.id_string is not None:
-            out['id_string'] = self.id_string
+            out[u'id_string'] = self.id_string
         if self.asset_type is not None:
-            out['asset_type'] = self.asset_type
+            out[u'asset_type'] = self.asset_type
         return out
 
     def to_json(self, **kwargs):
@@ -338,9 +342,8 @@ class FormPack(object):
                versions=-1, multiple_select="both",
                force_index=False, copy_fields=(), title=None,
                tag_cols_for_header=None, header_lang=-1):
-        """
-        Create an export for given versions of the form
-        """
+        '''Create an export for a given versions of the form'''
+
         versions = self._get_versions(versions)
         title = title or self.title
         return Export(self, versions, lang=lang, group_sep=group_sep,
@@ -352,9 +355,7 @@ class FormPack(object):
                       header_lang=header_lang)
 
     def autoreport(self, versions=-1):
-        """
-        Create an automatic report for given versions of the form
-        """
+        '''Create an automatic report for a given versions of the form'''
         return AutoReport(self, self._get_versions(versions))
 
     def _get_versions(self, versions):

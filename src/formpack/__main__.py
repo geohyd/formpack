@@ -1,23 +1,24 @@
 # coding: utf-8
+
 from __future__ import (unicode_literals, print_function, absolute_import,
                         division)
 
-import json
-import sys
 
 import begin
 
+import sys
+import json
 from formpack import FormPack
+from .utils.xls_to_ss_structure import xls_to_dicts
 from .utils.expand_content import expand_content
 from .utils.flatten_content import flatten_content
-from .utils.xls_to_ss_structure import xls_to_dicts
 
 
 def print_xls(filename, expand=False, flatten=False, xml=False):
-    """
+    '''
     converts and XLS file with many sheets to a JSON object with lists
     of key-value pairs for each row in the sheet.
-    """
+    '''
     try:
         with open(filename, 'r') as ff:
             content = xls_to_dicts(ff)
@@ -35,7 +36,7 @@ def print_xls(filename, expand=False, flatten=False, xml=False):
             else:
                 print(json.dumps(content,
                                  indent=2))
-    except EnvironmentError as e:
+    except EnvironmentError, e:
         sys.exit('error trying to read input as xls file? {}: {}'.format(
                  filename, e))
 
@@ -49,16 +50,13 @@ def xls(filename, expand=False, flatten=False, xml=False):
     }
     print_xls(filename, **kwargs)
 
-
 @begin.subcommand
 def xlse(filename):
     print_xls(filename, expand=True)
 
-
 @begin.subcommand
 def xlsef(filename):
     print_xls(filename, expand=True, flatten=True)
-
 
 @begin.start
 def run():

@@ -11,9 +11,9 @@ literacy_test
 from ..load_fixture_json import load_fixture_json
 
 DATA = {
-    'title': 'Literacy test',
-    'id_string': 'literacy_test',
-    'versions': [
+    u'title': u'Literacy test',
+    u'id_string': 'literacy_test',
+    u'versions': [
         load_fixture_json('literacy_test/v1'),
     ],
 }
