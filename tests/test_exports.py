@@ -2264,37 +2264,4 @@ class TestFormPackExport(unittest.TestCase):
                 ],
             },
         ]
-<<<<<<< HEAD
-        for s in submissions:
-            s[fp.default_version_id_key] = get_first_occurrence(fp.versions)
-        export = fp.export(versions=fp.versions.keys())
-        geojson_obj = json.loads(''.join(
-            export.to_geojson(submissions, geo_question_name='Trace')
-        ))
-        self.assertEqual(len(geojson_obj['features']), 1)
-        self.assertDictEqual(
-            geojson_obj['features'][0]['geometry'],
-            {
-                "coordinates": [[2.0, 1.0, 3.0], [6.0, 5.0, 7.0]],
-                "type": "LineString"
-            }
-        )
-        geojson_obj = json.loads(''.join(
-            export.to_geojson(submissions, geo_question_name='Shape')
-        ))
-        self.assertEqual(len(geojson_obj['features']), 1)
-        self.assertDictEqual(
-            geojson_obj['features'][0]['geometry'],
-            {
-                "coordinates": [[
-                    [2.0, 1.0, 3.0],
-                    [10.0, 9.0, 11.0],
-                    [6.0, 5.0, 7.0],
-                    [2.0, 1.0, 3.0],
-                ]],
-                "type": "Polygon"
-            }
-        )
-=======
->>>>>>> upstream/master
 

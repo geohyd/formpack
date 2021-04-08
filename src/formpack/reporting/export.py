@@ -33,6 +33,7 @@ class Export(object):
                  version_id_keys=[],
                  multiple_select="both", copy_fields=(), force_index=False,
                  title="submissions", tag_cols_for_header=None, filter_fields=(), header_lang=-1):
+                 #ANTEA : add last param header_lang=-1 
         """
 
         :param formpack: FormPack
@@ -49,12 +50,14 @@ class Export(object):
         :param force_index: bool.
         :param title: string
         :param tag_cols_for_header: list
+        # ANTEA :
         :param header_lang: string, False (`constants.UNSPECIFIED_TRANSLATION`), or
             None (`constants.UNTRANSLATED`), if not set, default value equal lang arg.
         """
 
         self.formpack = formpack
         self.lang = lang
+        # ANTEA :
         self.header_lang = self.lang if header_lang == -1 else header_lang
         self.group_sep = group_sep
         self.title = title
@@ -89,6 +92,7 @@ class Export(object):
             group_sep,
             hierarchy_in_labels,
             tag_cols_for_header,
+            # ANTEA : 
             self.header_lang,
         )
         self.sections, self.labels, self.tags = res
@@ -170,6 +174,7 @@ class Export(object):
                                                 hierarchy_in_labels=False,
                                                 tag_cols_for_header=None,
                                                 header_lang=UNSPECIFIED_TRANSLATION):
+                                                # ANTEA add last param header_lang=UNSPECIFIED_TRANSLATION
         """ Return 3 mappings containing field, labels, and tags by section
 
             This is needed because when making an export for several
@@ -220,6 +225,7 @@ class Export(object):
 
         for field in all_fields:
             section_fields.setdefault(field.section.name, []).append(field)
+            # ANTEA change first param lang to header_lang
             section_labels.setdefault(field.section.name, []).append(
                 field.get_labels(header_lang, group_sep,
                                  hierarchy_in_labels,
@@ -459,7 +465,7 @@ class Export(object):
                 rows.append(row)
 
         return rows
-
+    # ANTEA add def to_antea
     def to_antea(self, settings, output_file, submissions, xform_id, token, user, export_type):
         module = __import__('formpack.antea_export.' + export_type, fromlist=['AnteaExport'])
         AnteaExport = getattr(module, 'AnteaExport')
@@ -484,6 +490,7 @@ class Export(object):
         #Call finish method
         anteaExport.finish()
 
+    # ANTEA add def get_field
     def get_field(self, key):
         """Return the type of the key"""
         all_fields = self.formpack.get_fields_for_versions(self.versions)
@@ -491,6 +498,7 @@ class Export(object):
             if field.name == key:
                 return field
 
+    # ANTEA add def to_json
     def to_json(self, submissions):
         import json
         import ast

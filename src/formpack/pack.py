@@ -338,6 +338,7 @@ class FormPack(object):
                versions=-1, multiple_select="both",
                force_index=False, copy_fields=(), title=None,
                tag_cols_for_header=None, filter_fields=(), header_lang=-1):
+               # ANTEA : add last param header_lang=-1 
         """
         Create an export for given versions of the form
         """
@@ -351,6 +352,7 @@ class FormPack(object):
                       tag_cols_for_header=tag_cols_for_header,
                       filter_fields=filter_fields,
                       header_lang=header_lang,)
+                      # ANTEA : add last param header_lang=header_lang, 
 
     def autoreport(self, versions=-1):
         """
