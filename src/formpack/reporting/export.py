@@ -500,9 +500,7 @@ class Export(object):
 
     # ANTEA add def to_json
     def to_json(self, submissions):
-        import json
         import ast
-        all_fields = self.formpack.get_fields_for_versions(self.versions)
         finalJson = {}
         finalJson['-'] = []
 
