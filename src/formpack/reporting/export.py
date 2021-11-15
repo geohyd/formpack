@@ -1,10 +1,8 @@
 # coding: utf-8
-from __future__ import (unicode_literals, print_function, absolute_import,
-                        division)
-
 import json
+import re
 import zipfile
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from inspect import isclass
 from typing import Iterator, Generator, Optional
 
@@ -19,23 +17,36 @@ from ..schema import CopyField
 from ..submission import FormSubmission
 from ..utils.exceptions import FormPackGeoJsonError
 from ..utils.flatten_content import flatten_tag_list
-from ..utils.future import iteritems, itervalues, OrderedDict
 from ..utils.geojson import field_and_response_to_geometry
 from ..utils.iterator import get_first_occurrence
+from ..utils.replace_aliases import EXTENDED_MEDIA_TYPES
 from ..utils.spss import spss_labels_from_variables_dict
-from ..utils.string import unicode, unique_name_for_xls
+from ..utils.string import unique_name_for_xls
+from ..utils.text import get_valid_filename
 
 
-class Export(object):
+class Export:
 
-    def __init__(self, formpack, form_versions, lang=UNSPECIFIED_TRANSLATION,
-                 group_sep="/", hierarchy_in_labels=False,
-                 version_id_keys=[],
-                 multiple_select="both", copy_fields=(), force_index=False,
-                 title="submissions", tag_cols_for_header=None, filter_fields=(), header_lang=-1):
-                 #ANTEA : add last param header_lang=-1 
+    def __init__(
+        self,
+        formpack,
+        form_versions,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep="/",
+        hierarchy_in_labels=False,
+        version_id_keys=[],
+        multiple_select="both",
+        copy_fields=(),
+        force_index=False,
+        title="submissions",
+        tag_cols_for_header=None,
+        filter_fields=(),
+        xls_types_as_text=True,
+        include_media_url=False,
+        header_lang=-1
+    ):
+     #ANTEA : add last param header_lang=-1
         """
-
         :param formpack: FormPack
         :param form_versions: OrderedDict
         :param lang: string, False (`constants.UNSPECIFIED_TRANSLATION`), or
@@ -50,6 +61,8 @@ class Export(object):
         :param force_index: bool.
         :param title: string
         :param tag_cols_for_header: list
+        :param filter_fields: list
+        :param xls_types_as_text: bool
         # ANTEA :
         :param header_lang: string, False (`constants.UNSPECIFIED_TRANSLATION`), or
             None (`constants.UNTRANSLATED`), if not set, default value equal lang arg.
@@ -68,6 +81,8 @@ class Export(object):
         self.herarchy_in_labels = hierarchy_in_labels
         self.version_id_keys = version_id_keys
         self.filter_fields = filter_fields
+        self.xls_types_as_text = xls_types_as_text
+        self.include_media_url = include_media_url
         self.__r_groups_submission_mapping_values = {}
 
         if tag_cols_for_header is None:
@@ -77,8 +92,8 @@ class Export(object):
         # If some fields need to be arbitrarily copied, add them
         # to the first section
         if copy_fields:
-            for version in itervalues(form_versions):
-                first_section = next(itervalues(version.sections))
+            for version in iter(form_versions.values()):
+                first_section = next(iter(version.sections.values()))
                 for copy_field in copy_fields:
                     if isclass(copy_field):
                         dumb_field = copy_field(section=first_section)
@@ -86,13 +101,20 @@ class Export(object):
                         dumb_field = CopyField(copy_field, section=first_section)
                     first_section.fields[dumb_field.name] = dumb_field
 
+        # Some copy fields are classes, some strings -- collect their field
+        # names for later use
+        self.copy_field_names = [
+            getattr(copy_field, 'FIELD_NAME', copy_field)
+            for copy_field in self.copy_fields
+        ]
+
         # this deals with merging all form versions headers and labels
         res = self.get_fields_labels_tags_for_all_versions(
             lang,
             group_sep,
             hierarchy_in_labels,
             tag_cols_for_header,
-            # ANTEA : 
+            # ANTEA :
             self.header_lang,
         )
         self.sections, self.labels, self.tags = res
@@ -227,9 +249,13 @@ class Export(object):
             section_fields.setdefault(field.section.name, []).append(field)
             # ANTEA change first param lang to header_lang
             section_labels.setdefault(field.section.name, []).append(
-                field.get_labels(header_lang, group_sep,
-                                 hierarchy_in_labels,
-                                 self.multiple_select)
+                field.get_labels(
+                    header_lang=header_lang,
+                    group_sep=group_sep,
+                    hierarchy_in_labels=hierarchy_in_labels,
+                    multiple_select=self.multiple_select,
+                    include_media_url=self.include_media_url,
+                )
             )
             all_sections[field.section.name] = field.section
 
@@ -243,13 +269,8 @@ class Export(object):
                 auto_field_names.append('_parent_table_name')
                 auto_field_names.append('_parent_index')
                 # Add extra fields
-                for copy_field in self.copy_fields:
-                    if isclass(copy_field):
-                        auto_field_names.append(
-                            "_submission_{}".format(copy_field.FIELD_NAME))
-                    else:
-                        auto_field_names.append(
-                            "_submission_{}".format(copy_field))
+                for copy_field in self.copy_field_names:
+                    auto_field_names.append("_submission_{}".format(copy_field))
 
         # Flatten field labels and names. Indeed, field.get_labels()
         # and self.names return a list because a multiple select field can
@@ -262,7 +283,8 @@ class Export(object):
             tags = []
             for field in fields:
                 value_names = field.get_value_names(
-                    multiple_select=self.multiple_select
+                    multiple_select=self.multiple_select,
+                    include_media_url=self.include_media_url,
                 )
                 name_lists.append(value_names)
 
@@ -293,7 +315,12 @@ class Export(object):
 
         return section_fields, section_labels, section_tags
 
-    def format_one_submission(self, submission, current_section):
+    def format_one_submission(
+        self,
+        submission,
+        current_section,
+        attachments=None,
+    ):
 
         # 'current_section' is the name of what will become sheets in xls.
         # If you don't have repeat groups, there is only one section
@@ -334,6 +361,31 @@ class Export(object):
         row = self._row_cache[_section_name]
         _fields = tuple(current_section.fields.values())
 
+        def _get_attachment(val, field, attachments):
+            """
+            Filter attachments for filenames that match the submission field's
+            value
+            """
+            # Not all submissions will have attachments and we only want to
+            # consider media types
+            if (
+                field.data_type not in EXTENDED_MEDIA_TYPES
+                or not attachments
+                or val is None
+            ):
+                return []
+
+            _val = get_valid_filename(val)
+            return [
+                f
+                for f in attachments
+                if re.match(fr'^.*/{_val}$', f['filename']) is not None
+            ]
+
+        def _get_value_from_entry(entry, field):
+            suffix = 'meta/' if field.data_type == 'audit' else ''
+            return entry.get(f'{suffix}{field.path}')
+
         # Ensure that fields are filtered if they've been specified, otherwise
         # carry on as usual
         if self.filter_fields:
@@ -370,20 +422,29 @@ class Export(object):
             # previous one, but we reset it, to gain some perfs.
             row.update(_empty_row)
 
+            attachments = entry.get('_attachments') or attachments
+
             for field in _fields:
                 # TODO: pass a context to fields so they can all format ?
                 if field.can_format:
 
                     # get submission value for this field
-                    val = entry.get(field.path)
+                    val = _get_value_from_entry(entry, field)
+                    # get the attachment for this field
+                    attachment = _get_attachment(val, field, attachments)
                     # get a mapping of {"col_name": "val", ...}
                     cells = field.format(
-                        val, _lang, multiple_select=self.multiple_select
+                        val=val,
+                        lang=_lang,
+                        multiple_select=self.multiple_select,
+                        xls_types_as_text=self.xls_types_as_text,
+                        attachment=attachment,
+                        include_media_url=self.include_media_url
                     )
 
                     # save fields value if they match parent mapping fields.
                     # Useful to map children to their parent when flattening groups.
-                    if field.path in self.copy_fields:
+                    if field.path in self.copy_field_names:
                         if _section_name not in self.__r_groups_submission_mapping_values:
                             self.__r_groups_submission_mapping_values[_section_name] = {}
                         self.__r_groups_submission_mapping_values[_section_name].update(cells)
@@ -401,29 +462,15 @@ class Export(object):
             if '_index' in row:
                 row['_index'] = _indexes[_section_name]
 
-            # If the submission has been tagged, join those tags together into
-            # a comma-separated string
-            for tags_col in ('_tags', '_submission__tags'):
-                if tags_col in row:
-                    tags = row[tags_col]
-                    row[tags_col] = (
-                        ', '.join(tags) if isinstance(tags, list) else tags
-                    )
-
             if '_parent_table_name' in row:
                 row['_parent_table_name'] = current_section.parent.name
                 row['_parent_index'] = _indexes[row['_parent_table_name']]
                 extra_mapping_values = self.__get_extra_mapping_values(current_section.parent)
                 if extra_mapping_values:
-                    for extra_mapping_field in self.copy_fields:
-                        if isclass(extra_mapping_field):
-                            row[
-                                '_submission_{}'.format(extra_mapping_field.FIELD_NAME)
-                            ] = extra_mapping_values.get(extra_mapping_field, "")
-                        else:
-                            row[
-                                '_submission_{}'.format(extra_mapping_field)
-                            ] = extra_mapping_values.get(extra_mapping_field, "")
+                    for extra_mapping_field in self.copy_field_names:
+                        row[
+                            '_submission_{}'.format(extra_mapping_field)
+                        ] = extra_mapping_values.get(extra_mapping_field, '')
 
             rows.append(list(row.values()))
 
@@ -434,9 +481,12 @@ class Export(object):
                 # and adding the results to the list of rows for this section.
                 nested_data = entry.get(child_section.path)
                 if nested_data:
-                    chunk = self.format_one_submission(entry[child_section.path],
-                                                       child_section)
-                    for key, value in iteritems(chunk):
+                    chunk = self.format_one_submission(
+                        entry[child_section.path],
+                        child_section,
+                        attachments,
+                    )
+                    for key, value in iter(chunk.items()):
                         if key in chunks:
                             chunks[key].extend(value)
                         else:
@@ -603,7 +653,7 @@ class Export(object):
             return value.replace(quote, quote * 2)
 
         def format_line(line, sep, quote):
-            line = [escape_quote(unicode(x), quote) for x in line]
+            line = [escape_quote(str(x), quote) for x in line]
             return quote + (quote + sep + quote).join(line) + quote
 
         section, labels = sections[0]
@@ -825,7 +875,14 @@ class Export(object):
         return table
 
     def to_xlsx(self, filename, submissions):
-        workbook = xlsxwriter.Workbook(filename, {'constant_memory': True})
+        workbook = xlsxwriter.Workbook(
+            filename,
+            {
+                'constant_memory': True,
+                'default_date_format': 'yyyy-mm-dd',
+                'remove_timezone': True,
+            },
+        )
         workbook.use_zip64()
 
         sheets = {}
@@ -835,17 +892,13 @@ class Export(object):
         sheet_row_positions = defaultdict(lambda: 0)
 
         def _append_row_to_sheet(sheet_, data):
-            # Ensure all list objects are coerced to strings otherwise
-            # xlswriter will fail to export
-            data_ = [str(d) if isinstance(d, list) else d for d in data]
-
             # XlsxWriter doesn't have a method like this built in, so we have
             # to keep track of the current row for each sheet
             row_index = sheet_row_positions[sheet_]
             sheet_.write_row(
                 row=row_index,
                 col=0,
-                data=data_
+                data=data
             )
             row_index += 1
             sheet_row_positions[sheet_] = row_index
@@ -901,7 +954,7 @@ class Export(object):
             for section_name, rows in chunk.items():
                 if section == section_name:
                     for row in rows:
-                        row = [unicode(x) for x in row]
+                        row = [str(x) for x in row]
                         yield "<tr><td>" + "</td><td>".join(row) + "</td></tr>"
 
         yield "</tbody>"

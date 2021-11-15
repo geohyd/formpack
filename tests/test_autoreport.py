@@ -1,12 +1,9 @@
 # coding: utf-8
-from __future__ import (division, print_function, unicode_literals)
-
 import json
 import unittest
 
 from formpack import FormPack
 from .fixtures import build_fixture
-from formpack.utils.string import unicode
 
 
 class TestAutoReport(unittest.TestCase):
@@ -77,7 +74,7 @@ class TestAutoReport(unittest.TestCase):
 
         assert stats.submissions_count == 4
 
-        stats = [(unicode(repr(f)), n, d) for f, n, d in stats]
+        stats = [(str(repr(f)), n, d) for f, n, d in stats]
 
         expected = [
             (
@@ -266,7 +263,7 @@ class TestAutoReport(unittest.TestCase):
 
         assert stats.submissions_count == 6
 
-        stats = [(unicode(repr(f)), n, d) for f, n, d in stats]
+        stats = [(str(repr(f)), n, d) for f, n, d in stats]
 
         expected = [
             (
@@ -337,6 +334,83 @@ class TestAutoReport(unittest.TestCase):
         for i, stat in enumerate(stats):
             assert stat == expected[i]
 
+    def test_rich_report_or_other(self):
+
+        title, schemas, submissions = build_fixture('or_other')
+        fp = FormPack(schemas, title)
+
+        report = fp.autoreport()
+        stats = report.get_stats(submissions)
+
+        assert stats.submissions_count == 3
+
+        stats = [(str(repr(f)), n, d) for f, n, d in stats]
+
+        expected = [
+            (
+                "<FormChoiceField name='fav_emperor' type='select_one'>",
+                'fav_emperor',
+                {
+                    'total_count': 3,
+                    'not_provided': 0,
+                    'provided': 3,
+                    'show_graph': True,
+                    'frequency': [('other', 2), ('augustus', 1)],
+                    'percentage': [('other', 66.67), ('augustus', 33.33)],
+                },
+            ),
+            (
+                "<TextField name='fav_emperor_other' type='text'>",
+                'fav_emperor_other',
+                {
+                    'total_count': 3,
+                    'not_provided': 1,
+                    'provided': 2,
+                    'show_graph': False,
+                    'frequency': [('Nero', 1), ('Marcus Aurelius', 1)],
+                    'percentage': [('Nero', 33.33), ('Marcus Aurelius', 33.33)],
+                },
+            ),
+            (
+                "<FormChoiceFieldWithMultipleSelect name='fav_emperors' type='select_multiple'>",
+                'fav_emperors',
+                {
+                    'total_count': 3,
+                    'not_provided': 0,
+                    'provided': 3,
+                    'show_graph': True,
+                    'frequency': [
+                        ('julius', 2),
+                        ('caligula', 1),
+                        ('other', 1),
+                        ('tiberius', 1),
+                        ('augustus', 1),
+                    ],
+                    'percentage': [
+                        ('julius', 66.67),
+                        ('caligula', 33.33),
+                        ('other', 33.33),
+                        ('tiberius', 33.33),
+                        ('augustus', 33.33),
+                    ],
+                },
+            ),
+            (
+                "<TextField name='fav_emperors_other' type='text'>",
+                'fav_emperors_other',
+                {
+                    'total_count': 3,
+                    'not_provided': 2,
+                    'provided': 1,
+                    'show_graph': False,
+                    'frequency': [('Commodus', 1)],
+                    'percentage': [('Commodus', 33.33)],
+                },
+            ),
+        ]
+        for i, stat in enumerate(stats):
+            assert stat == expected[i]
+
     def test_disaggregate(self):
 
         title, schemas, submissions = build_fixture('auto_report')
@@ -348,7 +422,7 @@ class TestAutoReport(unittest.TestCase):
 
         assert stats.submissions_count == 6
 
-        stats = [(unicode(repr(f)), n, d) for f, n, d in stats]
+        stats = [(str(repr(f)), n, d) for f, n, d in stats]
 
         expected = [
             (
@@ -472,7 +546,7 @@ class TestAutoReport(unittest.TestCase):
 
         assert stats.submissions_count == 22
 
-        stats = [(unicode(repr(field)), field_name, stats_dict) for field, field_name, stats_dict in stats]
+        stats = [(str(repr(field)), field_name, stats_dict) for field, field_name, stats_dict in stats]
 
         for stat in stats:
             stats_dict = dict(stat[2])
@@ -514,7 +588,7 @@ class TestAutoReport(unittest.TestCase):
 
         assert stats.submissions_count == len(submissions)
 
-        stats = [(unicode(repr(f)), n, d) for f, n, d in stats]
+        stats = [(str(repr(f)), n, d) for f, n, d in stats]
         expected = [(
             "<NumField name='the_number' type='integer'>", 'the_number',
             {

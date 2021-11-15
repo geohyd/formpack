@@ -1,22 +1,18 @@
 # coding: utf-8
-from __future__ import (unicode_literals, print_function,
-                        absolute_import, division)
-
 import difflib
 import json
+from collections import OrderedDict
 from copy import deepcopy
 
+from formpack.schema.fields import CopyField
 from .version import FormVersion
-from .utils import str_types
 from .reporting import Export, AutoReport
 from .utils.expand_content import expand_content
-from .utils.future import OrderedDict
 from .utils.replace_aliases import replace_aliases
 from .constants import UNSPECIFIED_TRANSLATION
-from formpack.schema.fields import CopyField
 
 
-class FormPack(object):
+class FormPack:
 
     def __init__(self, versions=None, title='Submissions', id_string=None,
                  default_version_id_key='__version__',
@@ -226,7 +222,7 @@ class FormPack(object):
         """
         # Cast data_types if it's not already a list
         if data_types is not None:
-            if isinstance(data_types, str_types):
+            if isinstance(data_types, str):
                 data_types = [data_types]
 
         # tmp2 is a 2 dimensions list of `field`.
@@ -240,11 +236,12 @@ class FormPack(object):
         #
         # Index 0 of tmp2d will be `[field1, field2]`
         tmp2d = []
-        # This dict is used to remember final position of each field.
-        # Its keys are field_names and values are tuples of coordinates in tmp2d
+        # This dict is used to remember final position of each field. Its keys
+        # are the combination of field and section names and the values are
+        # tuples of coordinates in tmp2d.
         # Keeping example above:
-        #       `positions[field1.name]` would be `(0, 0)`
-        #       `positions[field2.name]` would be `(0, 1)`
+        #       `positions[f'{section.name}_{field1.name}']` would be `(0, 0)`
+        #       `positions[f'{section.name}_{field2.name}']` would be `(0, 1)`
         positions = {}
 
         # Create the initial field mappings from the first form version
@@ -255,10 +252,11 @@ class FormPack(object):
         index = 0
         for section in versions_desc[0].sections.values():
             for field_name, field_object in section.fields.items():
+                section_field_name = f'{section.name}_{field_name}'
                 if isinstance(field_object, CopyField):
                     copy_fields.append(field_object)
                 else:
-                    positions[field_name] = (index, 0)
+                    positions[section_field_name] = (index, 0)
                     tmp2d.append([field_object])
                     index += 1
 
@@ -266,9 +264,10 @@ class FormPack(object):
             index = 0
             for section_name, section in version.sections.items():
                 for field_name, field_object in section.fields.items():
+                    section_field_name = f'{section_name}_{field_name}'
                     if not isinstance(field_object, CopyField):
-                        if field_name in positions:
-                            position = positions[field_name]
+                        if section_field_name in positions:
+                            position = positions[section_field_name]
                             latest_field_object = tmp2d[position[0]][position[1]]
                             # Because versions_desc are ordered from latest to oldest,
                             # we use current field object as the old one and the one already
@@ -287,7 +286,7 @@ class FormPack(object):
                                 # it can happen when current version has more items than newest one.
                                 index = len(tmp2d) - 1
 
-                            positions[field_name] = (index, len(tmp2d[index]) - 1)
+                            positions[section_field_name] = (index, len(tmp2d[index]) - 1)
 
                         index += 1
 
@@ -334,25 +333,46 @@ class FormPack(object):
     def to_json(self, **kwargs):
         return json.dumps(self.to_dict(), **kwargs)
 
-    def export(self, lang=UNSPECIFIED_TRANSLATION, group_sep='/', hierarchy_in_labels=False,
-               versions=-1, multiple_select="both",
-               force_index=False, copy_fields=(), title=None,
-               tag_cols_for_header=None, filter_fields=(), header_lang=-1):
-               # ANTEA : add last param header_lang=-1 
+    def export(
+        self,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep='/',
+        hierarchy_in_labels=False,
+        versions=-1,
+        multiple_select="both",
+        force_index=False,
+        copy_fields=(),
+        title=None,
+        tag_cols_for_header=None,
+        filter_fields=(),
+        xls_types_as_text=True,
+        include_media_url=False,
+        header_lang=-1
+    ):
+    # ANTEA : add last param header_lang=-1
         """
         Create an export for given versions of the form
         """
         versions = self._get_versions(versions)
         title = title or self.title
-        return Export(self, versions, lang=lang, group_sep=group_sep,
-                      hierarchy_in_labels=hierarchy_in_labels,
-                      version_id_keys=self.version_id_keys(versions),
-                      title=title, multiple_select=multiple_select,
-                      force_index=force_index, copy_fields=copy_fields,
-                      tag_cols_for_header=tag_cols_for_header,
-                      filter_fields=filter_fields,
-                      header_lang=header_lang,)
-                      # ANTEA : add last param header_lang=header_lang, 
+        return Export(
+            self,
+            versions,
+            lang=lang,
+            group_sep=group_sep,
+            hierarchy_in_labels=hierarchy_in_labels,
+            version_id_keys=self.version_id_keys(versions),
+            title=title,
+            multiple_select=multiple_select,
+            force_index=force_index,
+            copy_fields=copy_fields,
+            tag_cols_for_header=tag_cols_for_header,
+            filter_fields=filter_fields,
+            xls_types_as_text=xls_types_as_text,
+            include_media_url=include_media_url,
+            header_lang=header_lang
+        )
+        # ANTEA : add last param header_lang=header_lang,
 
     def autoreport(self, versions=-1):
         """
@@ -365,7 +385,7 @@ class FormPack(object):
         if versions is None:
             versions = -1
 
-        if isinstance(versions, str_types + (int,)):
+        if isinstance(versions, (str, int,)):
             versions = [versions]
         versions = [self[key] for key in versions]
 

@@ -1,6 +1,4 @@
 # coding: utf-8
-from __future__ import (unicode_literals, print_function,
-                        absolute_import, division)
 
 # In the core formpack code, the default `lang` parameter conflicted
 # with the desired representation of the JSON form, where "null" would
@@ -61,13 +59,23 @@ EXPORT_SETTING_FIELDS_FROM_ALL_VERSIONS = 'fields_from_all_versions'
 EXPORT_SETTING_FLATTEN = 'flatten'
 EXPORT_SETTING_GROUP_SEP = 'group_sep'
 EXPORT_SETTING_HIERARCHY_IN_LABELS = 'hierarchy_in_labels'
+EXPORT_SETTING_INCLUDE_MEDIA_URL = 'include_media_url'
 EXPORT_SETTING_LANG = 'lang'
 EXPORT_SETTING_MULTIPLE_SELECT = 'multiple_select'
+EXPORT_SETTING_NAME = 'name'
+EXPORT_SETTING_QUERY = 'query'
 EXPORT_SETTING_SOURCE = 'source'
+EXPORT_SETTING_SUBMISSION_IDS = 'submission_ids'
 EXPORT_SETTING_TYPE = 'type'
+EXPORT_SETTING_XLS_TYPES_AS_TEXT = 'xls_types_as_text'
 OPTIONAL_EXPORT_SETTINGS = [
     EXPORT_SETTING_FIELDS,
     EXPORT_SETTING_FLATTEN,
+    EXPORT_SETTING_INCLUDE_MEDIA_URL,
+    EXPORT_SETTING_NAME,
+    EXPORT_SETTING_QUERY,
+    EXPORT_SETTING_SUBMISSION_IDS,
+    EXPORT_SETTING_XLS_TYPES_AS_TEXT,
 ]
 REQUIRED_EXPORT_SETTINGS = [
     EXPORT_SETTING_FIELDS_FROM_ALL_VERSIONS,
@@ -113,3 +121,35 @@ VALID_BOOLEANS = [
     TRUE,
 ]
 
+# Kobo locking constants
+KOBO_LOCK_ALL = 'kobo--lock_all'
+KOBO_LOCK_COLUMN = 'kobo--locking-profile'
+KOBO_LOCK_KEY = 'locked'
+KOBO_LOCK_SHEET = 'kobo--locking-profiles'
+KOBO_LOCKING_RESTRICTIONS = [
+    'choice_add',
+    'choice_delete',
+    'choice_label_edit',
+    'choice_value_edit',
+    'choice_order_edit',
+    'question_delete',
+    'question_label_edit',
+    'question_settings_edit',
+    'question_skip_logic_edit',
+    'question_validation_edit',
+    'group_delete',
+    'group_label_edit',
+    'group_question_add',
+    'group_question_delete',
+    'group_question_order_edit',
+    'group_settings_edit',
+    'group_skip_logic_edit',
+    'group_split',
+    'form_replace',
+    'group_add',
+    'question_add',
+    'question_order_edit',
+    'language_edit',
+    'form_appearance',
+    'form_meta_edit',
+]

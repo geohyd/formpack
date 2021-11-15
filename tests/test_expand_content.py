@@ -1,8 +1,6 @@
 # coding: utf-8
-from __future__ import (unicode_literals, print_function,
-                        absolute_import, division)
-
 import copy
+from collections import OrderedDict
 
 from formpack import FormPack
 from formpack.constants import OR_OTHER_COLUMN as _OR_OTHER
@@ -12,7 +10,6 @@ from formpack.utils.expand_content import _expand_tags
 from formpack.utils.expand_content import _get_special_survey_cols
 from formpack.utils.expand_content import expand_content, _expand_type_to_dict
 from formpack.utils.flatten_content import flatten_content
-from formpack.utils.future import OrderedDict
 from formpack.utils.string import orderable_with_none
 
 
@@ -35,6 +32,12 @@ def test_expand_select_one():
     assert s1['survey'][0]['type'] == 'select_one'
     assert s1['survey'][0]['select_from_list_name'] == 'dogs'
 
+
+def test_expand_select_multiple_legacy():
+    s1 = {'survey': [{'type': 'select all that apply from dogs'}]}
+    expand_content(s1, in_place=True)
+    assert s1['survey'][0]['type'] == 'select_multiple'
+    assert s1['survey'][0]['select_from_list_name'] == 'dogs'
 
 def test_expand_select_multiple_or_other():
     s1 = {'survey': [{'type': 'select_multiple dogs or_other'}]}

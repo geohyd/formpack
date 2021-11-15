@@ -1,19 +1,21 @@
 # coding: utf-8
-from __future__ import (unicode_literals, print_function,
-                        absolute_import, division)
+from collections import OrderedDict
 
 import pytest
 
 from formpack.constants import OR_OTHER_COLUMN
-from formpack.utils.flatten_content import (flatten_content,
-                                            flatten_tag_list,
-                                            translated_col_list)
-from formpack.utils.future import OrderedDict
+from formpack.utils.flatten_content import (
+    flatten_content,
+    flatten_tag_list,
+    translated_col_list,
+)
 from formpack.utils.json_hash import json_hash
-from formpack.utils.spreadsheet_content import (flatten_to_spreadsheet_content,
-                                                _order_cols,
-                                                _flatten_tags,
-                                                _order_sheet_names)
+from formpack.utils.spreadsheet_content import (
+    flatten_to_spreadsheet_content,
+    _order_cols,
+    _flatten_tags,
+    _order_sheet_names,
+)
 from formpack.utils.xls_to_ss_structure import _parsed_sheet
 
 
@@ -131,6 +133,27 @@ def test_flatten_select_multiple_type():
     flatten_content(a1, in_place=True)
     ss_struct = a1['survey']
     assert ss_struct[0]['type'] == 'select_multiple yn'
+
+
+def test_flatten_select_one_from_file_type():
+    a1 = _wrap_type({'select_one_from_file': 'yn.csv'})
+    flatten_content(a1, in_place=True)
+    ss_struct = a1['survey']
+    assert ss_struct[0]['type'] == 'select_one_from_file yn.csv'
+
+
+def test_flatten_select_multiple_from_file_type():
+    a1 = _wrap_type({'select_multiple_from_file': 'yn.csv'})
+    flatten_content(a1, in_place=True)
+    ss_struct = a1['survey']
+    assert ss_struct[0]['type'] == 'select_multiple_from_file yn.csv'
+
+
+def test_flatten_rank_type():
+    a1 = _wrap_type({'rank': 'yn'})
+    flatten_content(a1, in_place=True)
+    ss_struct = a1['survey']
+    assert ss_struct[0]['type'] == 'rank yn'
 
 
 def test_json_hash():

@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
-from __future__ import (unicode_literals, print_function,
-                        absolute_import, division)
-
 import re
 from collections import defaultdict, OrderedDict
 from copy import deepcopy
 from functools import reduce
 
 from .array_to_xpath import array_to_xpath
-from .future import range
-from .string import str_types
+from .replace_aliases import SELECT_TYPES
 from ..constants import (UNTRANSLATED, OR_OTHER_COLUMN,
                          TAG_COLUMNS_AND_SEPARATORS)
 
@@ -72,11 +68,10 @@ def _stringify_type__depr(json_qtype):
     {'select_one': 'xyz'} -> 'select_one xyz'
     {'select_multiple': 'xyz'} -> 'select_mutliple xyz'
     """
-    _type_keys = ['select_one', 'select_multiple']
     if len(json_qtype.keys()) != 1:
         raise ValueError('Type object must have exactly one key: %s' %
-                         ', '.join(_type_keys))
-    for try_key in _type_keys:
+                         ', '.join(SELECT_TYPES))
+    for try_key in SELECT_TYPES:
         if try_key in json_qtype:
             return '{} {}'.format(try_key, json_qtype[try_key])
     if 'select_one_or_other' in json_qtype:
@@ -101,7 +96,7 @@ def _flatten_tags(row, tag_cols_and_seps=None):
         tag_cols_and_seps = {}
 
     for col in ['tags'] + list(tag_cols_and_seps.keys()):
-        if col in row and isinstance(row[col], str_types):
+        if col in row and isinstance(row[col], str):
             return
 
     tag_list = row.pop('tags', [])

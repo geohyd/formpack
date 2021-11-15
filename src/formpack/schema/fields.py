@@ -1,8 +1,7 @@
 # coding: utf-8
-from __future__ import (unicode_literals, print_function, absolute_import,
-                        division)
-
-from collections import defaultdict
+import math
+from collections import defaultdict, OrderedDict
+from dateutil import parser
 from functools import partial
 from operator import itemgetter
 
@@ -11,7 +10,6 @@ import statistics
 from .datadef import FormDataDef, FormChoice
 from ..constants import UNSPECIFIED_TRANSLATION
 from ..utils import singlemode
-from ..utils.future import range, OrderedDict
 from ..utils.ordered_collection import OrderedDefaultdict
 
 
@@ -31,7 +29,7 @@ class FormField(FormDataDef):
         self.hierarchy = hierarchy + [self]
 
         # warning: the order of the super() call matters
-        super(FormField, self).__init__(name, labels, *args, **kwargs)
+        super().__init__(name, labels, *args, **kwargs)
 
         if has_stats is not None:
             self.has_stats = has_stats
@@ -41,8 +39,15 @@ class FormField(FormDataDef):
         # do not include the root section in the path
         self.path = '/'.join(info.name for info in self.hierarchy[1:])
 
-    def get_labels(self, lang=UNSPECIFIED_TRANSLATION, group_sep="/",
-                   hierarchy_in_labels=False, multiple_select="both"):
+    def get_labels(
+        self,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep="/",
+        hierarchy_in_labels=False,
+        multiple_select="both",
+        *args,
+        **kwargs
+    ):
         """ Return a list of labels for this field.
 
             Most fields have only one label, so the list contains only one item,
@@ -52,7 +57,7 @@ class FormField(FormDataDef):
         args = lang, group_sep, hierarchy_in_labels, multiple_select
         return [self._get_label(*args)]
 
-    def get_value_names(self, multiple_select="both"):
+    def get_value_names(self, multiple_select="both", *args, **kwargs):
         return super().get_value_names()
 
     def get_translation(self, val, lang=UNSPECIFIED_TRANSLATION):
@@ -79,7 +84,7 @@ class FormField(FormDataDef):
     # TODO: remove multiple_select ?
     def _get_label(self, lang=UNSPECIFIED_TRANSLATION, group_sep='/',
                    hierarchy_in_labels=False, multiple_select="both",
-                   _hierarchy_end=None):
+                   _hierarchy_end=None, *args, **kwargs):
         """
         Return the label for this field
 
@@ -147,36 +152,70 @@ class FormField(FormDataDef):
         tags = definition.get('tags', [])
         labels = cls._extract_json_labels(definition, translations)
         appearance = definition.get('appearance')
+        or_other = definition.get('_or_other', False)
 
         # normalize spaces
         data_type = definition['type']
-        choice = None
 
         if ' ' in data_type:
             raise ValueError('invalid data_type: %s' % data_type)
 
         if data_type in ('select_one', 'select_multiple'):
             choice_id = definition['select_from_list_name']
-            choice = field_choices[choice_id]
+            # pyxform#472 introduced dynamic list_names for select_one with the
+            # format of `select_one ${question_name}`. The choices are
+            # therefore not within a separate choice list
+            if choice_id.startswith('${') and choice_id.endswith('}'):
+                # ${dynamic_choice}, so question will be treated as a TextField
+                choice = None
+            else:
+                choice = field_choices[choice_id]
+        else:
+            choice = None
 
         data_type_classes = {
-            "select_one": FormChoiceField,
-            "select_multiple": FormChoiceFieldWithMultipleSelect,
-            "geopoint": FormGPSField,
-            "date": DateField,
-            "text": TextField,
-            "barcode": TextField,
+            # selects
+            'select_one': FormChoiceField,
+            'select_one_from_file': FormChoiceField,
+            'select_multiple': FormChoiceFieldWithMultipleSelect,
+            # TODO: Get this to work with FormChoiceFieldWithMultipleSelect
+            'select_multiple_from_file': TextField,
+            'rank': TextField,
 
-            # calculate is usually not text but for our purpose it's good
-            # enough
-            "calculate": TextField,
-            "acknowledge": TextField,
-            "integer": NumField,
+            # date and time
+            'date': DateField,
+            'today': DateField,
+            'time': TextField,
+            'datetime': DateTimeField,
+            'start': DateTimeField,
+            'end': DateTimeField,
+
+            # general
+            'text': TextField,
+            'barcode': TextField,
+            'acknowledge': TextField,
+            'calculate': TextField,
+
+            # geo
+            'geopoint': FormGPSField,
+            'start-geopoint': FormGPSField,
+
+            # media
+            'video': MediaField,
+            'image': MediaField,
+            'audio': MediaField,
+            'file': MediaField,
+            'background-audio': MediaField,
+            'audit': MediaField,
+
+            # numeric
+            'integer': NumField,
             'decimal': NumField,
+            'range': NumField,
 
             # legacy type, treat them as text
-            "select_one_external": partial(TextField, data_type=data_type),
-            "cascading_select": partial(TextField, data_type=data_type),
+            'select_one_external': partial(TextField, data_type=data_type),
+            'cascading_select': partial(TextField, data_type=data_type),
         }
 
         args = {
@@ -186,7 +225,8 @@ class FormField(FormDataDef):
             'data_type': data_type,
             'hierarchy': hierarchy,
             'section': section,
-            'choice': choice
+            'choice': choice,
+            'or_other': or_other,
         }
 
         if data_type == 'select_multiple' and appearance == 'literacy':
@@ -199,6 +239,7 @@ class FormField(FormDataDef):
     ):
         if val is None:
             val = ''
+
         return {self.name: val}
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
@@ -231,6 +272,35 @@ class FormField(FormDataDef):
 
     def parse_values(self, raw_values):
         yield raw_values
+
+    @staticmethod
+    def try_get_number(val):
+        """
+        Attempt to convert string values to integers or floats. If the value is
+        `inf` or `nan` or not a valid integer or float then return the string
+        value instead.
+        """
+
+        str_val = val
+
+        try:
+            val = int(val)
+        except ValueError:
+            pass
+        else:
+            return val
+
+        try:
+            val = float(val)
+        except ValueError:
+            pass
+
+        # The floats `+/-inf` and `nan` cause XLS exports to fail, therefore
+        # return the string value instead.
+        if isinstance(val, float) and not math.isfinite(val):
+            return str_val
+
+        return val
 
 
 class ExtendedFormField(FormField):
@@ -333,7 +403,7 @@ class TextField(ExtendedFormField):
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        stats = super(TextField, self).get_stats(metrics, lang, limit)
+        stats = super().get_stats(metrics, lang, limit)
 
         top = metrics.most_common(limit)
         total = stats['total_count']
@@ -352,7 +422,7 @@ class TextField(ExtendedFormField):
     def get_disaggregated_stats(self, metrics, top_splitters,
                                 lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        parent = super(TextField, self)
+        parent = super()
         stats = parent.get_disaggregated_stats(metrics, top_splitters, lang,
                                                limit)
         substats = self.get_substats(stats, metrics, top_splitters, lang)
@@ -368,6 +438,42 @@ class TextField(ExtendedFormField):
         return stats
 
 
+class MediaField(TextField):
+
+    def get_labels(self, include_media_url=False, *args, **kwargs):
+        label = self._get_label(*args, **kwargs)
+        if include_media_url:
+            return [label, f'{label}_URL']
+        return [label]
+
+    def get_value_names(self, include_media_url=False, *args, **kwargs):
+        if include_media_url:
+            return [self.name, f'{self.name}_URL']
+        return [self.name]
+
+    def format(
+        self,
+        val,
+        attachment=[],
+        include_media_url=False,
+        *args,
+        **kwargs,
+    ):
+        if val is None:
+            val = ''
+
+        if not include_media_url:
+            return {self.name: val}
+
+        download_url = (
+            attachment[0].get('download_url', '') if attachment else ''
+        )
+        return {
+            self.name: val,
+            f'{self.name}_URL': download_url,
+        }
+
+
 class DateField(ExtendedFormField):
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
@@ -377,7 +483,7 @@ class DateField(ExtendedFormField):
         Dates are sorted from old to new.
         """
 
-        stats = super(DateField, self).get_stats(metrics, lang, limit)
+        stats = super().get_stats(metrics, lang, limit)
 
         if self.data_type != "date":
             return stats
@@ -401,7 +507,7 @@ class DateField(ExtendedFormField):
     def get_disaggregated_stats(self, metrics, top_splitters,
                                 lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        parent = super(DateField, self)
+        parent = super()
         stats = parent.get_disaggregated_stats(metrics, top_splitters, lang,
                                                limit)
 
@@ -420,6 +526,41 @@ class DateField(ExtendedFormField):
 
         return stats
 
+    def format(self, val, xls_types_as_text=True, *args, **kwargs):
+        if val is None:
+            val = ''
+
+        if xls_types_as_text:
+            return {self.name: val}
+
+        _date = val
+        try:
+            _date = parser.parse(val)
+        except ValueError:
+            pass
+        else:
+            _date = _date.date()
+
+        return {self.name: _date}
+
+
+class DateTimeField(DateField):
+
+    def format(self, val, xls_types_as_text=True, *args, **kwargs):
+        if val is None:
+            val = ''
+
+        if xls_types_as_text:
+            return {self.name: val}
+
+        _date = val
+        try:
+            _date = parser.parse(val)
+        except ValueError:
+            pass
+
+        return {self.name: _date}
+
 
 class NumField(FormField):
 
@@ -436,7 +577,7 @@ class NumField(FormField):
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        stats = super(NumField, self).get_stats(metrics, lang, limit)
+        stats = super().get_stats(metrics, lang, limit)
 
         stats.update({
             'median': '*',
@@ -462,7 +603,7 @@ class NumField(FormField):
     def get_disaggregated_stats(self, metrics, top_splitters,
                                 lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        parent = super(NumField, self)
+        parent = super()
         stats = parent.get_disaggregated_stats(metrics, top_splitters, lang,
                                                limit)
 
@@ -511,11 +652,20 @@ class NumField(FormField):
         else:
             yield float(raw_values)
 
+    def format(self, val, xls_types_as_text=True, *args, **kwargs):
+        if val is None:
+            val = ''
+
+        if xls_types_as_text:
+            return {self.name: val}
+
+        return {self.name: self.try_get_number(val)}
+
 
 class CopyField(FormField):
     """ Just copy the data over. No translation. No manipulation """
     def __init__(self, name, hierarchy=(None,), section=None, *args, **kwargs):
-        super(CopyField, self).__init__(name, labels=None,
+        super().__init__(name, labels=None,
                                         data_type=name,
                                         hierarchy=(None,),
                                         section=section,
@@ -528,6 +678,96 @@ class CopyField(FormField):
         return [self.name]
 
 
+class IdCopyField(CopyField):
+
+    FIELD_NAME = '_id'
+
+    def __init__(self, section=None, *args, **kwargs):
+        super().__init__(
+            self.FIELD_NAME,
+            section=section,
+            *args,
+            **kwargs,
+        )
+
+    def format(self, val, xls_types_as_text=True, *args, **kwargs):
+        if val is None:
+            val = ''
+
+        if xls_types_as_text:
+            return {self.name: val}
+
+        return {self.name: int(val)}
+
+
+class SubmissionTimeCopyField(CopyField):
+
+    FIELD_NAME = '_submission_time'
+
+    def __init__(self, section=None, *args, **kwargs):
+        super().__init__(
+            self.FIELD_NAME,
+            section=section,
+            *args,
+            **kwargs,
+        )
+
+    def format(self, val, xls_types_as_text=True, *args, **kwargs):
+        if val is None:
+            val = ''
+
+        if xls_types_as_text:
+            return {self.name: val}
+
+        _date = val
+        try:
+            _date = parser.parse(val)
+        except ValueError:
+            pass
+
+        return {self.name: _date}
+
+
+class NotesCopyField(CopyField):
+
+    FIELD_NAME = '_notes'
+
+    def __init__(self, section=None, *args, **kwargs):
+        super().__init__(
+            self.FIELD_NAME,
+            section=section,
+            *args,
+            **kwargs,
+        )
+
+    def format(self, val, *args, **kwargs):
+        if not val:
+            val = ''
+
+        return {self.name: str(val)}
+
+
+class TagsCopyField(CopyField):
+
+    FIELD_NAME = '_tags'
+
+    def __init__(self, section=None, *args, **kwargs):
+        super().__init__(
+            self.FIELD_NAME,
+            section=section,
+            *args,
+            **kwargs,
+        )
+
+    def format(self, val, *args, **kwargs):
+        if val and isinstance(val, list):
+            val_ = ', '.join(val)
+        else:
+            val_ = ''
+
+        return {self.name: val_}
+
+
 class ValidationStatusCopyField(CopyField):
 
     # `FIELD_NAME` specifies both the name of the field in the source data and
@@ -535,7 +775,7 @@ class ValidationStatusCopyField(CopyField):
     FIELD_NAME = "_validation_status"
 
     def __init__(self, section=None, *args, **kwargs):
-        super(ValidationStatusCopyField, self).__init__(
+        super().__init__(
             self.FIELD_NAME,
             section=section,
             *args, **kwargs)
@@ -550,7 +790,7 @@ class ValidationStatusCopyField(CopyField):
             else:
                 value = {self.name: val.get("label", "")}
         else:
-            value = super(CopyField, self).format(val=val, lang=lang, context=context)
+            value = super().format(val=val, lang=lang, context=context)
 
         return value
 
@@ -559,11 +799,18 @@ class FormGPSField(FormField):
 
     def __init__(self, name, labels, data_type, hierarchy=None,
                  section=None, choice=None, *args, **kwargs):
-        super(FormGPSField, self).__init__(name, labels, data_type,
+        super().__init__(name, labels, data_type,
                                            hierarchy, section, *args, **kwargs)
 
-    def get_labels(self, lang=UNSPECIFIED_TRANSLATION, group_sep='/',
-                   hierarchy_in_labels=False, multiple_select="both"):
+    def get_labels(
+        self,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep='/',
+        hierarchy_in_labels=False,
+        multiple_select="both",
+        *args,
+        **kwargs
+    ):
         """Return a list of labels for this field.
 
         Most fields have only one label, so the list contains only one item,
@@ -593,7 +840,7 @@ class FormGPSField(FormField):
 
         return labels
 
-    def get_value_names(self, multiple_select="both"):
+    def get_value_names(self, multiple_select="both", *args, **kwargs):
         """ Return the list of field identifiers used by this field"""
         names = []
         names.append(self.name)
@@ -603,7 +850,14 @@ class FormGPSField(FormField):
 
         return names
 
-    def format(self, val, lang=UNSPECIFIED_TRANSLATION, *args, **kwargs):
+    def format(
+        self,
+        val,
+        lang=UNSPECIFIED_TRANSLATION,
+        xls_types_as_text=True,
+        *args,
+        **kwargs
+    ):
         """Same than other format(), but dealing with 2 to 4 values
 
         The GPS value can contain 2, 3 or 4 numerical separated by a
@@ -632,7 +886,10 @@ class FormGPSField(FormField):
 
         values = [val, "", "", "", ""]
         for i, value in enumerate(val.split(), 1):
-            values[i] = value
+            if not xls_types_as_text:
+                values[i] = self.try_get_number(value)
+            else:
+                values[i] = value
 
         return dict(zip(self.get_value_names(), values))
 
@@ -641,9 +898,10 @@ class FormChoiceField(ExtendedFormField):
     """  Same as FormField, but link the data to a FormChoice """
 
     def __init__(self, name, labels, data_type, hierarchy=None,
-                 section=None, choice=None, *args, **kwargs):
+                 section=None, choice=None, or_other=False, *args, **kwargs):
         self.choice = choice or FormChoice(name)
-        super(FormChoiceField, self).__init__(name, labels, data_type,
+        self.or_other = or_other
+        super().__init__(name, labels, data_type,
                                               hierarchy, section,
                                               *args, **kwargs)
 
@@ -658,15 +916,27 @@ class FormChoiceField(ExtendedFormField):
         else:
             return translation
 
-    def format(self, val, lang=UNSPECIFIED_TRANSLATION, multiple_select="both"):
+    def format(
+        self,
+        val,
+        lang=UNSPECIFIED_TRANSLATION,
+        multiple_select="both",
+        xls_types_as_text=True,
+        *args,
+        **kwargs,
+    ):
         if val is None:
             val = ''
         val = self.get_translation(val, lang)
-        return {self.name: val}
+
+        if xls_types_as_text:
+            return {self.name: val}
+
+        return {self.name: self.try_get_number(val)}
 
     def get_stats(self, metrics, lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        stats = super(FormChoiceField, self).get_stats(metrics, lang, limit)
+        stats = super().get_stats(metrics, lang, limit)
         total = stats['total_count']
 
         top = metrics.most_common(limit)
@@ -687,7 +957,7 @@ class FormChoiceField(ExtendedFormField):
     def get_disaggregated_stats(self, metrics, top_splitters,
                                 lang=UNSPECIFIED_TRANSLATION, limit=100):
 
-        parent = super(FormChoiceField, self)
+        parent = super()
         stats = parent.get_disaggregated_stats(metrics, top_splitters, lang,
                                                limit)
 
@@ -736,8 +1006,15 @@ class FormChoiceFieldWithMultipleSelect(FormChoiceField):
 
         return "{}{}{}".format(label, group_sep, option_label)
 
-    def get_labels(self, lang=UNSPECIFIED_TRANSLATION, group_sep='/',
-                   hierarchy_in_labels=False, multiple_select="both"):
+    def get_labels(
+        self,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep='/',
+        hierarchy_in_labels=False,
+        multiple_select="both",
+        *args,
+        **kwargs
+    ):
         """ Return a list of labels for this field.
 
             Most fields have only one label, so the list contains only one item,
@@ -745,17 +1022,20 @@ class FormChoiceFieldWithMultipleSelect(FormChoiceField):
             value.
         """
         labels = []
+        label = self._get_label(lang, group_sep, hierarchy_in_labels)
         if multiple_select in ("both", "summary"):
-            labels.append(self._get_label(lang, group_sep, hierarchy_in_labels))
+            labels.append(label)
 
         if multiple_select in ("both", "details"):
             for option in self.choice.options.values():
                 args = (lang, group_sep, hierarchy_in_labels, option)
                 labels.append(self._get_option_label(*args))
+            if self.or_other:
+                labels.append(f'{label}/other')
 
         return labels
 
-    def get_value_names(self, multiple_select="both"):
+    def get_value_names(self, multiple_select="both", *args, **kwargs):
         """ Return the list of field identifiers used by this field"""
         names = []
         if multiple_select in ("both", "summary"):
@@ -764,6 +1044,9 @@ class FormChoiceFieldWithMultipleSelect(FormChoiceField):
         if multiple_select in ("both", "details"):
             for option_name in self.choice.options.keys():
                 names.append(self.name + '/' + option_name)
+            if self.or_other:
+                names.append(f'{self.name}/other')
+
         return names
 
     def __repr__(self):
@@ -771,27 +1054,37 @@ class FormChoiceFieldWithMultipleSelect(FormChoiceField):
         return "<FormChoiceFieldWithMultipleSelect name='%s' type='%s'>" % data
 
     # maybe try to cache those
-    def format(self, val, lang=UNSPECIFIED_TRANSLATION,
-               group_sep="/", hierarchy_in_labels=False,
-               multiple_select="both"):
-        """ Same than other format(), with an option for multiple_select layout
-
-                multiple_select:
-                "both": add the summary column and a colum for each value
-                "summary": only the summary column
-                "details": only the details column
+    def format(
+        self,
+        val,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep="/",
+        hierarchy_in_labels=False,
+        multiple_select="both",
+        xls_types_as_text=True,
+        *args,
+        **kwargs,
+    ):
         """
+        Same than other format(), with an option for multiple_select layout
+
+        multiple_select:
+            'both': add the summary column and a colum for each value
+            'summary': only the summary column
+            'details': only the details column
+        """
+        _zero, _one = ('0', '1') if xls_types_as_text else (0, 1)
         if val is None:
             # If the value is missing, do not imply that any response was
             # received: fill with empty strings instead of zeros
             return dict.fromkeys(
-                self.get_value_names(multiple_select=multiple_select), ""
+                self.get_value_names(multiple_select=multiple_select), ''
             )
 
         cells = dict.fromkeys(
-            self.get_value_names(multiple_select=multiple_select), "0"
+            self.get_value_names(multiple_select=multiple_select), _zero
         )
-        if multiple_select in ("both", "summary"):
+        if multiple_select in ('both', 'summary'):
             res = []
             for v in val.split():
                 try:
@@ -802,11 +1095,17 @@ class FormChoiceFieldWithMultipleSelect(FormChoiceField):
                     res.append(label)
                 else:
                     res.append(v)
-            cells[self.name] = " ".join(res)
 
-        if multiple_select in ("both", "details"):
+            if len(res) == 1 and not xls_types_as_text:
+                _res = self.try_get_number(res[0])
+            else:
+                _res = ' '.join(res)
+            cells[self.name] = _res
+
+        if multiple_select in ('both', 'details'):
             for choice in val.split():
-                cells[self.name + "/" + choice] = "1"
+                cells[self.name + '/' + choice] = _one
+
         return cells
 
     def parse_values(self, raw_values):
@@ -847,7 +1146,7 @@ class FormLiteracyTestField(FormChoiceFieldWithMultipleSelect):
     def __init__(self, *args, **kwargs):
         self.parameters_in_use = [
             param for param in self.PREPENDED_PARAMETERS if param is not None]
-        super(FormChoiceFieldWithMultipleSelect, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     @property
     def parameter_value_names(self):
@@ -857,19 +1156,26 @@ class FormLiteracyTestField(FormChoiceFieldWithMultipleSelect):
                 for name, label in self.parameters_in_use
         ]
 
-    def get_labels(self, lang=UNSPECIFIED_TRANSLATION, group_sep='/',
-                   hierarchy_in_labels=False, multiple_select="both"):
+    def get_labels(
+        self,
+        lang=UNSPECIFIED_TRANSLATION,
+        group_sep='/',
+        hierarchy_in_labels=False,
+        multiple_select="both",
+        *args,
+        **kwargs
+    ):
         question_label = self._get_label(lang, group_sep, hierarchy_in_labels)
         parameter_labels = [
             question_label + group_sep + label
                 for name, label in self.parameters_in_use
         ]
-        word_labels = super(FormLiteracyTestField, self).get_labels(
+        word_labels = super().get_labels(
             lang, group_sep, hierarchy_in_labels, multiple_select)
         return parameter_labels + word_labels
 
     def get_value_names(self, *args, **kwargs):
-        word_value_names = super(FormLiteracyTestField, self).get_value_names(
+        word_value_names = super().get_value_names(
             *args, **kwargs)
         return self.parameter_value_names + word_value_names
 
@@ -879,7 +1185,7 @@ class FormLiteracyTestField(FormChoiceFieldWithMultipleSelect):
         all_values = val.split()
         prepended_cells = dict(zip(self.parameter_value_names, all_values))
         word_values = all_values[len(self.PREPENDED_PARAMETERS):]
-        cells = super(FormLiteracyTestField, self).format(
+        cells = super().format(
             ' '.join(word_values), *args, **kwargs)
         cells.update(prepended_cells)
         return cells

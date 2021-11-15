@@ -5,7 +5,11 @@ from __future__ import (unicode_literals, print_function,
 import pytest
 
 from formpack.utils.iterator import get_first_occurrence
-from formpack.utils.replace_aliases import replace_aliases, dealias_type
+from formpack.utils.replace_aliases import (
+    replace_aliases,
+    dealias_type,
+    kobo_specific_sub,
+)
 
 
 def test_replace_select_one():
@@ -17,8 +21,13 @@ def test_replace_select_one():
 def test_select_one_aliases_replaced():
     assert dealias_type('select1 dogs') == 'select_one dogs'
     assert dealias_type('select one dogs') == 'select_one dogs'
-    assert dealias_type('select1 dogs') == 'select_one dogs'
     assert dealias_type('select_one dogs') == 'select_one dogs'
+
+
+def test_replace_select_one_from_file():
+    s1 = {'survey': [{'type': 'select one from file dogs.csv'}]}
+    replace_aliases(s1, in_place=True)
+    assert s1['survey'][0]['type'] == 'select_one_from_file dogs.csv'
 
 
 def test_true_false_value_replaced():
@@ -41,6 +50,12 @@ def test_select_multiple_aliases_replaced():
     assert dealias_type('select multiple dogs') == 'select_multiple dogs'
     assert dealias_type('select_many dogs') == 'select_multiple dogs'
     assert dealias_type('select_multiple dogs') == 'select_multiple dogs'
+
+
+def test_replace_select_multiple_from_file():
+    s1 = {'survey': [{'type': 'select multiple from file dogs.csv'}]}
+    replace_aliases(s1, in_place=True)
+    assert s1['survey'][0]['type'] == 'select_multiple_from_file dogs.csv'
 
 
 def test_misc_types():
@@ -142,3 +157,11 @@ def test_survey_header_replaced():
     _assert_column_converted_to('required', 'required')
     _assert_column_converted_to('bind::required', 'required')
     _assert_column_converted_to('bind::relevant', 'relevant')
+
+def test_kobo_specific_names_handle_n_and_m_dash():
+    # n-dash
+    assert kobo_specific_sub('kobo–something') == 'kobo--something'
+    # m-dash
+    assert kobo_specific_sub('kobo—something') == 'kobo--something'
+    # normal
+    assert kobo_specific_sub('kobo--something') == 'kobo--something'
