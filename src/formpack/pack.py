@@ -10,6 +10,7 @@ from .reporting import Export, AutoReport
 from .utils.expand_content import expand_content
 from .utils.replace_aliases import replace_aliases
 from .constants import UNSPECIFIED_TRANSLATION
+from .constants import UNSPECIFIED_HEADER_LANG
 
 
 class FormPack:
@@ -347,7 +348,7 @@ class FormPack:
         filter_fields=(),
         xls_types_as_text=True,
         include_media_url=False,
-        header_lang=-1
+        header_lang=UNSPECIFIED_HEADER_LANG
     ):
     # ANTEA : add last param header_lang=-1
         """

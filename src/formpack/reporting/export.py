@@ -12,6 +12,7 @@ from ..constants import (
     GEO_QUESTION_TYPES,
     TAG_COLUMNS_AND_SEPARATORS,
     UNSPECIFIED_TRANSLATION,
+    UNSPECIFIED_HEADER_LANG,
 )
 from ..schema import CopyField
 from ..submission import FormSubmission
@@ -43,7 +44,7 @@ class Export:
         filter_fields=(),
         xls_types_as_text=True,
         include_media_url=False,
-        header_lang=-1
+        header_lang=UNSPECIFIED_HEADER_LANG
     ):
      #ANTEA : add last param header_lang=-1
         """
@@ -71,7 +72,7 @@ class Export:
         self.formpack = formpack
         self.lang = lang
         # ANTEA :
-        self.header_lang = self.lang if header_lang == -1 else header_lang
+        self.header_lang = self.lang if header_lang == UNSPECIFIED_HEADER_LANG else header_lang
         self.group_sep = group_sep
         self.title = title
         self.versions = form_versions
@@ -250,6 +251,7 @@ class Export:
             # ANTEA change first param lang to header_lang
             section_labels.setdefault(field.section.name, []).append(
                 field.get_labels(
+                    lang=lang,
                     header_lang=header_lang,
                     group_sep=group_sep,
                     hierarchy_in_labels=hierarchy_in_labels,
