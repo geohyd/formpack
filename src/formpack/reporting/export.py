@@ -251,7 +251,7 @@ class Export:
             # ANTEA change first param lang to header_lang
             section_labels.setdefault(field.section.name, []).append(
                 field.get_labels(
-                    lang=lang,
+                    lang=header_lang,
                     header_lang=header_lang,
                     group_sep=group_sep,
                     hierarchy_in_labels=hierarchy_in_labels,
