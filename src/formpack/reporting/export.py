@@ -17,6 +17,7 @@ from ..constants import (
     GEO_QUESTION_TYPES,
     TAG_COLUMNS_AND_SEPARATORS,
     UNSPECIFIED_TRANSLATION,
+    UNSPECIFIED_HEADER_LANG,
 )
 from ..schema import CopyField, FormField
 from ..submission import FormSubmission
@@ -44,6 +45,7 @@ class Export:
         force_index=False,
         title='submissions',
         tag_cols_for_header=None,
+        header_lang=UNSPECIFIED_HEADER_LANG,
         filter_fields=(),
         xls_types_as_text=True,
         include_media_url=False,
@@ -63,6 +65,9 @@ class Export:
         :param force_index: bool.
         :param title: string
         :param tag_cols_for_header: list
+        lang_header
+        :param header_lang: string, False (`constants.UNSPECIFIED_TRANSLATION`), or
+            None (`constants.UNTRANSLATED`), if not set, default value equal lang arg.
         :param filter_fields: list
         :param xls_types_as_text: bool
         :param include_media_url: bool
@@ -71,6 +76,7 @@ class Export:
         self.formpack = formpack
         self.analysis_form = formpack.analysis_form
         self.lang = lang
+        self.header_lang = self.lang if header_lang == UNSPECIFIED_HEADER_LANG else header_lang
         self.group_sep = group_sep
         self.title = title
         self.versions = form_versions
@@ -120,6 +126,7 @@ class Export:
             lang,
             group_sep,
             hierarchy_in_labels,
+            self.header_lang,
             tag_cols_for_header,
         )
         self.sections, self.labels, self.tags = res
@@ -202,6 +209,7 @@ class Export:
         lang=UNSPECIFIED_TRANSLATION,
         group_sep='/',
         hierarchy_in_labels=False,
+        header_lang=UNSPECIFIED_TRANSLATION,
         tag_cols_for_header=None,
     ):
         """
@@ -267,7 +275,7 @@ class Export:
             section_fields.setdefault(field.section.name, []).append(field)
             section_labels.setdefault(field.section.name, []).append(
                 field.get_labels(
-                    lang=lang,
+                    lang=header_lang,
                     group_sep=group_sep,
                     hierarchy_in_labels=hierarchy_in_labels,
                     multiple_select=self.multiple_select,
@@ -536,6 +544,98 @@ class Export:
                 rows.append(row)
 
         return rows
+
+    # ANTEA add def to_antea
+    def to_antea(self, settings, output_file, submissions, xform_id, token, user, export_type):
+        module = __import__('formpack.antea_export.' + export_type, fromlist=['AnteaExport'])
+        AnteaExport = getattr(module, 'AnteaExport')
+        # I pass self (this formpack) to my new object
+        args = {
+            'formPack' : self,
+            'settings' : settings,
+            'submissions' : submissions,
+            'xform_id' : xform_id,
+            'token' : token,
+            'user' : user,
+            'export_type' : export_type
+        }
+        anteaExport = AnteaExport(**args)
+        #Call compute method
+        anteaExport.compute()
+        #Get the path of result file
+        finalPath = anteaExport.get_final_file_path()
+        #Write result in the final Django xlsx file
+        with open(finalPath, "rb") as template_final_xlsx:
+            output_file.write(template_final_xlsx.read())
+        #Call finish method
+        anteaExport.finish()
+
+    # ANTEA add def get_field
+    def get_field(self, key):
+        """Return the type of the key"""
+        all_fields = self.formpack.get_fields_for_versions(self.versions)
+        for field in all_fields:
+            if field.name == key:
+                return field
+
+    # ANTEA add def to_json
+    def to_json(self, submissions):
+        import ast
+        finalJson = {}
+        finalJson['-'] = []
+
+        #Prepare the flat Json
+        for chunk in self.parse_submissions(submissions):
+            multipleSelectsChoices = []
+            for section_name, rows in chunk.items():
+                if section_name not in finalJson:
+                    finalJson[section_name] = []
+                for row in rows:
+                    obj = {}
+                    previous_select_multiple = None
+                    for key, data in zip(self.labels[section_name], row):
+                        try:
+                            current_field = self.get_field(key)
+                            if current_field:
+                                key_type = current_field.data_type
+                            else:
+                                key_type = None
+                            if key_type is None:
+                                is_multiple_choice = previous_select_multiple and previous_select_multiple["type"] == "select_multiple" and key in multipleSelectsChoices
+                                if is_multiple_choice:
+                                    obj[key] = ast.literal_eval(data)
+                                else:
+                                    obj[key] = data
+                            elif key_type == "decimal" or key_type == "integer":
+                                obj[key] = ast.literal_eval(data)
+                            elif key_type == "select_multiple":
+                                multipleSelectsChoices.extend(current_field.get_labels())
+                                obj[key] = data
+                                previous_select_multiple = {
+                                    "key": key,
+                                    "type": key_type
+                                }
+                            else:
+                                obj[key] = data
+                        except Exception as e:
+                            obj[key] = data
+
+                    finalJson[section_name].append(obj)
+                    if u"_parent_table_name" not in obj:
+                        finalJson['-'].append(obj)
+        #Append repeatGroup in _parent_table_name
+        for groupKey in finalJson:
+            for objData in finalJson[groupKey]:
+                parent = "-"
+                if "_parent_table_name" in objData:
+                    parent = objData["_parent_table_name"]
+                parentArray = finalJson[parent]
+                for parentObj in parentArray:
+                    if "_parent_index" in objData and parentObj["_index"] == objData["_parent_index"]:
+                        if groupKey not in parentObj:
+                            parentObj[groupKey] = []
+                        parentObj[groupKey].append(objData)
+        return finalJson['-']
 
     def to_dict(self, submissions):
         """
